@@ -7,7 +7,7 @@ enum class KenanteMsgParams {
     receiver_id,
     message,
     action,
-    media_url,
+    attachments,
     channel
 
 }

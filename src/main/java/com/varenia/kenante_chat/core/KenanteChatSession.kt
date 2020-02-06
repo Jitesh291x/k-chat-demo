@@ -5,25 +5,29 @@ import android.os.Looper
 import android.util.Log
 import android.util.SparseArray
 import androidx.core.util.containsValue
+import com.varenia.kenante_chat.enums.KenanteChatMessageAction
 import com.varenia.kenante_chat.interfaces.KenanteChatEventListener
+import com.varenia.kenante_chat.interfaces.KenanteChatHistoryEventListener
 import com.varenia.kenante_core.core.KenanteSettings
 import com.varenia.kenante_core.interfaces.KenanteWsConnEventListener
 import org.json.JSONObject
 import java.lang.Exception
 import java.lang.RuntimeException
 
-class KenanteChatSession private constructor() : KenanteWsConnEventListener{
+class KenanteChatSession private constructor() : KenanteWsConnEventListener {
 
     private val TAG = KenanteChatSession::class.java.simpleName
     private var webSocketConnected = false
-    private var kenanteChatEventListener : KenanteChatEventListener? = null
+    private var kenanteChatEventListener: KenanteChatEventListener? = null
     private var userId: Int = 0
     internal var handler = Handler(KenanteSettings.getInstance().getContext()!!.mainLooper)
     internal var chatChannels = SparseArray<String>()
+    internal var chatHistoryEventListener: KenanteChatHistoryEventListener? = null
+    internal var connectedToChat = false
 
-    companion object{
+    companion object {
         private var kInstance: KenanteChatSession? = null
-        fun getInstance() : KenanteChatSession {
+        fun getInstance(): KenanteChatSession {
             if (kInstance == null) {
                 kInstance = KenanteChatSession()
             }
@@ -31,11 +35,15 @@ class KenanteChatSession private constructor() : KenanteWsConnEventListener{
         }
     }
 
-    fun setChatListener(listener: KenanteChatEventListener){
+    fun setChatListener(listener: KenanteChatEventListener) {
         this.kenanteChatEventListener = listener
     }
 
     fun enterChat(roomId: Int, userId: Int) {
+        if (connectedToChat) {
+            kenanteChatEventListener?.onError("Already connected to chat")
+            return
+        }
         this.userId = userId
         var chatRoom = "".plus(roomId).plus("_").plus(userId)
         chatRoom = "ws/chat/$chatRoom/"
@@ -44,25 +52,32 @@ class KenanteChatSession private constructor() : KenanteWsConnEventListener{
         KenanteChatWebSocket.connect()
     }
 
-    fun sendMessage(chatMessage: KenanteChatMessage){
-        if(!chatChannels.containsValue(chatMessage.channel))
+    fun sendMessage(chatMessage: KenanteChatMessage) {
+        if (!chatChannels.containsValue(chatMessage.channel))
             throw RuntimeException("Incorrect channel")
         KenanteChatWsSendMessages.sendMessage(chatMessage)
+    }
+
+    fun getChatHistory(listener: KenanteChatHistoryEventListener, roomId: Int, userId: Int) {
+        chatHistoryEventListener = listener
+        KenanteChatWsSendMessages.requestHistory(roomId, userId)
     }
 
     fun leaveChat() {
         KenanteChatWsSendMessages.leaveChat(userId)
         KenanteChatWebSocket.disconnect()
-        handler.post{
+        handler.post {
             kenanteChatEventListener?.onChatLeft()
         }
     }
 
     private fun releaseChatObjects() {
-        if(webSocketConnected){
+        if (webSocketConnected) {
             webSocketConnected = false
             //Todo: Release all chat objects
         }
+        connectedToChat = false
+        chatChannels.clear()
     }
 
     override fun onOpen() {
@@ -82,6 +97,7 @@ class KenanteChatSession private constructor() : KenanteWsConnEventListener{
     }
 
     override fun onClose() {
+        connectedToChat = false
         handler.post {
             kenanteChatEventListener?.onError("Connection closed")
         }

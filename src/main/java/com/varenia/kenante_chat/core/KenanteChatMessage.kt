@@ -8,10 +8,10 @@ class KenanteChatMessage(
     val senderId: Int,
     val receiverId: Int,
     val message: String,
-    val action: KenanteChatMessageAction,
-    val mediaUrl: String
+    val action: KenanteChatMessageAction
 ) {
     // In UTC
     var timestamp: String = ""
     var channel: String = ""
+    var attachments: ArrayList<KenanteAttachment> = ArrayList()
 }
